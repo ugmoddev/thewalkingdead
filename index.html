@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hoi Cloud</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <style>
+        /* Reset và base styles */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body, html {
+            height: 100%; 
+            width: 100%;
+            background: #fff; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+        
+        #iframeContainer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0; 
+            bottom: 0;
+            cursor: default; 
+            transform-origin: center center;
+            transition: transform 0.2s ease-out; 
+            transform: scale(1.0) translate(0px, 0px);
+        }
+        
+        #iframeContainer.pan-mode {
+            cursor: grab; 
+        }
+        
+        #iframeContainer.pan-mode.is-dragging {
+            cursor: grabbing; 
+        }
+        
+        #hiddenFrame {
+            width: 100%;
+            height: 100%; 
+            border: none;
+            display: block;
+        }
+        
+        #hiddenFrame.active {
+            pointer-events: auto;
+        }
+        
+        #hiddenFrame.inactive {
+            pointer-events: none;
+        }
+
+        /* Control Panel - SỬA LẠI ĐỂ ĐẢM BẢO HIỂN THỊ ĐÚNG */
+        #controlPanel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: rgba(255, 255, 255, 0.98);
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            max-width: 280px;
+            width: auto;
+        }
+
+        #controlPanel.hidden {
+            transform: translateX(-120%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #panelToggle {
+            position: fixed;
+            z-index: 1001;
+            width: 52px;
+            height: 52px;
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            user-select: none;
+            touch-action: none;
+            left: 10px;
+            top: 10px;
+        }
+
+        #panelToggle:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: scale(1.08);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        #panelToggle.dragging {
+            cursor: grabbing;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+            transform: scale(1.15);
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: 100%;
+        }
+
+        .control-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 2px;
+        }
+
+        .control-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            width: 100%;
+            min-width: 140px;
+            touch-action: manipulation;
+            font-family: inherit;
+        }
+
+        .control-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .control-button:active {
+            transform: translateY(0);
+        }
+
+        #panToggle.active {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        }
+
+        #panToggle.inactive {
+            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+        }
+
+        #zoomControls {
+            display: flex;
+            gap: 6px;
+            width: 100%;
+        }
+
+        #zoomControls button {
+            flex: 1;
+            min-width: 60px;
+            padding: 10px;
+            font-size: 16px;
+        }
+
+        #zoomLevel {
+            text-align: center;
+            font-size: 12px;
+            color: #718096;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+
+        /* URL Input Modal */
+        #urlModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
+            backdrop-filter: blur(10px);
+        }
+
+        #urlModal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 90%;
+            max-width: 480px;
+            max-height: 80vh;
+            overflow-y: auto;
+            transform: scale(0.9);
+            animation: scaleIn 0.3s ease forwards;
+        }
+
+        @keyframes scaleIn {
+            to { transform: scale(1); }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #2d3748;
+            margin: 0;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #718096;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .close-modal:hover {
+            color: #2d3748;
+            background: #f7fafc;
+        }
+
+        .url-input-group {
+            margin-bottom: 24px;
+        }
+
+        .url-input-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 14px;
+        }
+
+        .url-input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+            font-family: inherit;
+            background: #f7fafc;
+        }
+
+        .url-input:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+        .watermark {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            color: #999;
+            font-size: 12px;
+        }
+
+        .modal-button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .modal-button.primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .modal-button.primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .modal-button.secondary {
+            background: #718096;
+            color: white;
+        }
+
+        .modal-button.secondary:hover {
+            background: #4a5568;
+            transform: translateY(-2px);
+        }
+
+        /* Anti-DevTools Styles */
+        #devToolsWarning {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 9999;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #devToolsWarning.active {
+            display: flex;
+        }
+
+        #devToolsWarning h1 {
+            color: #ff6b6b;
+            font-size: 2.2em;
+            margin-bottom: 16px;
+            font-weight: 700;
+        }
+
+        #devToolsWarning p {
+            font-size: 1.1em;
+            margin-bottom: 30px;
+            max-width: 500px;
+            line-height: 1.6;
+            color: #e2e8f0;
+        }
+
+        #devToolsWarning button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            font-size: 1em;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        #devToolsWarning button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Ẩn toàn bộ nội dung khi DevTools mở */
+        .content-hidden {
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        /* Mobile specific styles */
+        @media (max-width: 768px) {
+            #controlPanel {
+                top: 8px;
+                left: 8px;
+                right: 8px;
+                max-width: none;
+                padding: 14px;
+                gap: 10px;
+            }
+            
+            .control-label {
+                font-size: 12px;
+            }
+            
+            .control-button {
+                min-width: 120px;
+                padding: 10px 12px;
+                font-size: 12px;
+            }
+            
+            #zoomControls button {
+                min-width: 50px;
+                padding: 8px;
+                font-size: 14px;
+            }
+
+            .modal-content {
+                padding: 20px;
+                margin: 20px;
+            }
+            
+            #panelToggle {
+                width: 48px;
+                height: 48px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            #controlPanel {
+                padding: 12px;
+                max-width: none;
+                width: calc(100vw - 16px);
+            }
+            
+            .control-button {
+                min-width: auto;
+                padding: 8px 10px;
+            }
+            
+            .modal-content {
+                padding: 16px;
+                margin: 16px;
+            }
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #2d3748;
+            color: white;
+            padding: 14px 20px;
+            border-radius: 10px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+            z-index: 3000;
+            animation: slideInRight 0.3s ease-out;
+            border-left: 4px solid #48bb78;
+            max-width: 320px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .toast.error {
+            border-left-color: #f56565;
+        }
+
+        .toast.info {
+            border-left-color: #4299e1;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Status indicator */
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        
+        .status-active {
+            background-color: #48bb78;
+            box-shadow: 0 0 8px rgba(72, 187, 120, 0.6);
+        }
+        
+        .status-inactive {
+            background-color: #f56565;
+        }
+
+        /* Đảm bảo không có phần tử nào bị tràn ra ngoài */
+        #mainContent {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div id="devToolsWarning">
+        <h1>⚠️ ACCESS DENIED</h1>
+        <p>Developer Tools are disabled for security reasons.<br>Please close Dev Tools to continue using the application.</p>
+        <button onclick="location.reload()">Reload Page</button>
+    </div>
+
+    <div id="mainContent">
+        <div id="panelToggle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 12H21" stroke="#2d3748" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3 6H21" stroke="#2d3748" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3 18H21" stroke="#2d3748" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </div>
+
+        <div id="controlPanel">
+            
+            <div class="control-group">
+                <div class="control-label">🔗 Copy Link</div>
+                <button id="copyUrlButton" class="control-button">
+                    📋 Copy Tool Link
+                </button>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">🔍 Zoom Controls</div>
+                <div id="zoomControls">
+                    <button id="zoomOutBtn" class="control-button">➖</button>
+                    <button id="zoomInBtn" class="control-button">➕</button>
+                    <button id="resetZoomBtn" class="control-button">🔄</button>
+                </div>
+                <div id="zoomLevel">100%</div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span class="status-indicator status-inactive" id="statusIndicator"></span>
+                    🖱️ Pan Controls
+                </div>
+                <button id="panToggle" class="control-button inactive">
+                    🔓 Enable Pan Mode
+                </button>
+                <div style="font-size: 11px; color: #718096; line-height: 1.4;">
+                    • <strong>Enable:</strong> Touch/Drag to move around<br>
+                    • <strong>Disable:</strong> Touch to use iframe
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">🔄 Reload</div>
+                <button id="reloadButton" class="control-button">
+                    🔄 Reload Page
+                </button>
+            </div>
+        </div>
+
+        <div id="urlModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title">Change Website URL</h3>
+                    <button class="close-modal" id="closeModalBtn">×</button>
+                </div>
+                <div class="url-input-group">
+                    <label class="url-input-label" for="newUrlInput">Enter new website URL:</label>
+                    <input type="url" id="newUrlInput" class="url-input" placeholder="https://example.com" value="">
+                </div>
+                <div class="modal-buttons">
+                    <button class="modal-button secondary" id="cancelModalBtn">Cancel</button>
+                    <button class="modal-button primary" id="confirmUrlBtn">Change URL</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="iframeContainer">
+            <iframe id="hiddenFrame" src="https://gointerstellar.app/a/hvtrs8%2F-tgsvdpite6.lou.eg-arpq%2Feanazy%2Fpna%7B-veahlonoey%2Flkmktgd-12532%5Dt3%2Fvhg-uankkne-fecd%2Fswrtitops%2Chvmn" referrerpolicy="no-referrer"></iframe>
+        </div>
+    </div>
+    <div class="watermark" bis_skin_checked="1">
+        Link tool hack: webtoolv107.netlify.app
+    </div>
+
+    <script>
+        // =========================================================================
+        // === CONFIGURATION ===
+        // =========================================================================
+        const CONFIG = {
+            ZOOM: {
+                MIN: 0.3,
+                MAX: 5.0,
+                STEP: 0.1,
+                DEFAULT: 1.0
+            },
+            URLS: {
+                TOOL: 'webtoolv107.netlify.app',
+                DEFAULT: 'https://gointerstellar.app/a/hvtrs8%2F-tgsvdpite6.lou.eg-arpq%2Feanazy%2Fpna%7B-veahlonoey%2Flkmktgd-12532%5Dt3%2Fvhg-uankkne-fecd%2Fswrtitops%2Chvmn'
+            }
+        };
+
+        // =========================================================================
+        // === STATE MANAGEMENT ===
+        // =========================================================================
+        let state = {
+            zoom: CONFIG.ZOOM.DEFAULT,
+            translateX: 0,
+            translateY: 0,
+            isDragging: false,
+            startX: 0,
+            startY: 0,
+            panMode: false,
+            panelVisible: true,
+            panelToggleDragging: false,
+            panelToggleStartX: 0,
+            panelToggleStartY: 0,
+            panelTogglePosX: 10,
+            panelTogglePosY: 10,
+            dragThreshold: 5,
+            hasDragged: false,
+            
+            isTouchDragging: false,
+            lastTouchX: 0,
+            lastTouchY: 0,
+            touchZoomDistance: 0,
+
+            currentUrl: CONFIG.URLS.DEFAULT
+        };
+
+        // =========================================================================
+        // === DOM ELEMENTS ===
+        // =========================================================================
+        const elements = {};
+
+        function initializeElements() {
+            return {
+                iframeContainer: document.getElementById('iframeContainer'),
+                hiddenFrame: document.getElementById('hiddenFrame'),
+                copyButton: document.getElementById('copyUrlButton'),
+                zoomLevel: document.getElementById('zoomLevel'),
+                panToggle: document.getElementById('panToggle'),
+                statusIndicator: document.getElementById('statusIndicator'),
+                controlPanel: document.getElementById('controlPanel'),
+                panelToggle: document.getElementById('panelToggle'),
+                reloadButton: document.getElementById('reloadButton'),
+                changeUrlButton: document.getElementById('changeUrlButton'), // Đã thêm lại
+                urlModal: document.getElementById('urlModal'),
+                newUrlInput: document.getElementById('newUrlInput'),
+                devToolsWarning: document.getElementById('devToolsWarning'),
+                mainContent: document.getElementById('mainContent'),
+                zoomOutBtn: document.getElementById('zoomOutBtn'),
+                zoomInBtn: document.getElementById('zoomInBtn'),
+                resetZoomBtn: document.getElementById('resetZoomBtn'),
+                closeModalBtn: document.getElementById('closeModalBtn'),
+                cancelModalBtn: document.getElementById('cancelModalBtn'),
+                confirmUrlBtn: document.getElementById('confirmUrlBtn')
+            };
+        }
+
+        // =========================================================================
+        // === CORE FUNCTIONALITY ===
+        // =========================================================================
+        
+        function applyTransform() {
+            const { zoom, translateX, translateY } = state;
+            
+            if (zoom > 1.0) {
+                const containerWidth = window.innerWidth;
+                const containerHeight = window.innerHeight;
+                const maxTranslateX = Math.max(0, (containerWidth * zoom - containerWidth) / 2);
+                const maxTranslateY = Math.max(0, (containerHeight * zoom - containerHeight) / 2);
+                
+                // Giới hạn di chuyển để không bị trôi quá xa nội dung
+                state.translateX = Math.max(-maxTranslateX, Math.min(translateX, maxTranslateX));
+                state.translateY = Math.max(-maxTranslateY, Math.min(translateY, maxTranslateY));
+            } else {
+                state.translateX = 0;
+                state.translateY = 0;
+            }
+
+            if (elements.iframeContainer) {
+                elements.iframeContainer.style.transform = 
+                    `scale(${zoom}) translate(${state.translateX}px, ${state.translateY}px)`;
+            }
+            
+            if (elements.zoomLevel) {
+                elements.zoomLevel.textContent = `${Math.round(zoom * 100)}%`;
+            }
+        }
+
+        function applyZoom(level) {
+            state.zoom = Math.max(CONFIG.ZOOM.MIN, Math.min(level, CONFIG.ZOOM.MAX));
+            applyTransform();
+        }
+
+        function zoomIn() {
+            applyZoom(state.zoom + CONFIG.ZOOM.STEP);
+        }
+
+        function zoomOut() {
+            applyZoom(state.zoom - CONFIG.ZOOM.STEP);
+        }
+
+        function resetZoom() {
+            applyZoom(CONFIG.ZOOM.DEFAULT);
+        }
+
+        function togglePanMode() {
+            state.panMode = !state.panMode;
+            
+            if (elements.panToggle && elements.iframeContainer && elements.hiddenFrame && elements.statusIndicator) {
+                if (state.panMode) {
+                    elements.panToggle.textContent = '🔒 Disable Pan Mode';
+                    elements.panToggle.classList.remove('inactive');
+                    elements.panToggle.classList.add('active');
+                    elements.iframeContainer.classList.add('pan-mode');
+                    elements.hiddenFrame.classList.remove('active');
+                    elements.hiddenFrame.classList.add('inactive');
+                    elements.statusIndicator.classList.remove('status-inactive');
+                    elements.statusIndicator.classList.add('status-active');
+                    
+                    showToast('🖱️ Pan Mode Enabled - Drag to move around', 'info');
+                } else {
+                    elements.panToggle.textContent = '🔓 Enable Pan Mode';
+                    elements.panToggle.classList.remove('active');
+                    elements.panToggle.classList.add('inactive');
+                    elements.iframeContainer.classList.remove('pan-mode');
+                    elements.iframeContainer.classList.remove('is-dragging');
+                    elements.hiddenFrame.classList.remove('inactive');
+                    elements.hiddenFrame.classList.add('active');
+                    elements.statusIndicator.classList.remove('status-active');
+                    elements.statusIndicator.classList.add('status-inactive');
+                    
+                    showToast('Pan Mode Disabled - Normal interaction', 'info');
+                }
+            }
+            
+            state.isDragging = false;
+            state.isTouchDragging = false;
+        }
+
+        function openUrlModal() {
+            if (elements.urlModal && elements.newUrlInput) {
+                elements.urlModal.classList.add('active');
+                elements.newUrlInput.value = state.currentUrl;
+                elements.newUrlInput.focus();
+                elements.newUrlInput.select();
+            }
+        }
+
+        function closeUrlModal() {
+            if (elements.urlModal) {
+                elements.urlModal.classList.remove('active');
+            }
+        }
+
+        function changeIframeUrl() {
+            if (!elements.newUrlInput || !elements.hiddenFrame) return;
+            
+            let newUrl = elements.newUrlInput.value.trim();
+            
+            if (!newUrl) {
+                showToast('❌ Please enter a valid URL', 'error');
+                return;
+            }
+
+            // Tự động thêm http/https nếu người dùng quên
+            if (!newUrl.startsWith('http://') && !newUrl.startsWith('https://')) {
+                newUrl = 'https://' + newUrl;
+            }
+
+            try {
+                new URL(newUrl);
+                
+                elements.hiddenFrame.src = newUrl;
+                state.currentUrl = newUrl;
+                localStorage.setItem('customIframeUrl', newUrl);
+                
+                showToast(`✅ URL changed to: ${newUrl}`, 'info');
+                closeUrlModal();
+                
+                resetZoom();
+                state.translateX = 0;
+                state.translateY = 0;
+                applyTransform();
+                
+            } catch (error) {
+                showToast('❌ Invalid URL format (e.g., https://example.com)', 'error');
+            }
+        }
+
+        function reloadPage() {
+            if (!elements.reloadButton || !elements.hiddenFrame) return;
+            
+            const originalText = elements.reloadButton.textContent;
+            elements.reloadButton.textContent = '⏳ Reloading...';
+            elements.reloadButton.disabled = true;
+            
+            // Xóa và tải lại src để đảm bảo tải lại hoàn toàn
+            const iframeSrc = elements.hiddenFrame.src;
+            elements.hiddenFrame.src = '';
+            setTimeout(() => {
+                elements.hiddenFrame.src = iframeSrc;
+                
+                setTimeout(() => {
+                    elements.reloadButton.textContent = originalText;
+                    elements.reloadButton.disabled = false;
+                    showToast('Page reloaded successfully!', 'info');
+                }, 1000);
+            }, 300);
+        }
+
+        function togglePanel() {
+            state.panelVisible = !state.panelVisible;
+            
+            if (elements.controlPanel) {
+                if (state.panelVisible) {
+                    elements.controlPanel.classList.remove('hidden');
+                } else {
+                    elements.controlPanel.classList.add('hidden');
+                }
+            }
+        }
+
+        function updatePanelTogglePosition() {
+            if (elements.panelToggle) {
+                elements.panelToggle.style.left = `${state.panelTogglePosX}px`;
+                elements.panelToggle.style.top = `${state.panelTogglePosY}px`;
+            }
+        }
+
+        // =========================================================================
+        // === UTILITY FUNCTIONS ===
+        // =========================================================================
+        function showToast(message, type = 'info') {
+            document.querySelectorAll('.toast').forEach(toast => toast.remove());
+            
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.remove();
+                }
+            }, 3000);
+        }
+
+        function getTouchDistance(touch1, touch2) {
+            const dx = touch1.clientX - touch2.clientX;
+            const dy = touch1.clientY - touch2.clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        // =========================================================================
+        // === EVENT LISTENERS ===
+        // =========================================================================
+        function initializeEventListeners() {
+            
+            // Copy URL Button
+            if (elements.copyButton) {
+                elements.copyButton.addEventListener('click', async () => {
+                    try {
+                        await navigator.clipboard.writeText(CONFIG.URLS.TOOL);
+                        showToast('✅ Link copied to clipboard!', 'info');
+                        elements.copyButton.textContent = '✅ Copied!';
+                        setTimeout(() => {
+                            elements.copyButton.textContent = '📋 Copy Tool Link';
+                        }, 2000);
+                    } catch (err) {
+                        showToast('❌ Failed to copy link', 'error');
+                    }
+                });
+            }
+
+            // Zoom Controls
+            if (elements.zoomOutBtn) {
+                elements.zoomOutBtn.addEventListener('click', zoomOut);
+            }
+            if (elements.zoomInBtn) {
+                elements.zoomInBtn.addEventListener('click', zoomIn);
+            }
+            if (elements.resetZoomBtn) {
+                elements.resetZoomBtn.addEventListener('click', resetZoom);
+            }
+
+            // Pan Toggle
+            if (elements.panToggle) {
+                elements.panToggle.addEventListener('click', togglePanMode);
+            }
+
+            // Change URL Button - ĐÃ THÊM LẠI
+            if (elements.changeUrlButton) {
+                elements.changeUrlButton.addEventListener('click', openUrlModal);
+            }
+
+            // Reload Button
+            if (elements.reloadButton) {
+                elements.reloadButton.addEventListener('click', reloadPage);
+            }
+
+            // Modal Controls
+            if (elements.closeModalBtn) {
+                elements.closeModalBtn.addEventListener('click', closeUrlModal);
+            }
+            if (elements.cancelModalBtn) {
+                elements.cancelModalBtn.addEventListener('click', closeUrlModal);
+            }
+            if (elements.confirmUrlBtn) {
+                elements.confirmUrlBtn.addEventListener('click', changeIframeUrl);
+            }
+
+            // Panel Toggle Events (Drag and click)
+            if (elements.panelToggle) {
+                elements.panelToggle.addEventListener('mousedown', startDraggingPanelToggle);
+                elements.panelToggle.addEventListener('touchstart', startDraggingPanelToggle);
+            }
+
+            // Mouse events for panning
+            if (elements.iframeContainer) {
+                elements.iframeContainer.addEventListener('mousedown', (e) => {
+                    if (!state.panMode || state.zoom <= 1.0 || e.button !== 0) return;
+                    
+                    state.isDragging = true;
+                    state.startX = e.clientX;
+                    state.startY = e.clientY;
+                    elements.iframeContainer.classList.add('is-dragging');
+                    e.preventDefault();
+                });
+            }
+
+            document.addEventListener('mousemove', (e) => {
+                if (!state.isDragging || !state.panMode) return;
+                
+                const dx = e.clientX - state.startX;
+                const dy = e.clientY - state.startY;
+                
+                state.translateX += dx / state.zoom;
+                state.translateY += dy / state.zoom;
+                
+                applyTransform();
+                
+                state.startX = e.clientX;
+                state.startY = e.clientY;
+                e.preventDefault();
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (state.isDragging) {
+                    state.isDragging = false;
+                    if (elements.iframeContainer) {
+                        elements.iframeContainer.classList.remove('is-dragging');
+                    }
+                }
+            });
+
+            // Touch events for panning and pinch-to-zoom
+            if (elements.iframeContainer) {
+                elements.iframeContainer.addEventListener('touchstart', (e) => {
+                    // Cho phép thao tác nếu đang ở chế độ Pan hoặc có pinch-to-zoom
+                    if (!state.panMode && e.touches.length !== 2) return;
+                    
+                    if (e.touches.length === 1 && state.panMode) {
+                        state.isTouchDragging = true;
+                        state.lastTouchX = e.touches[0].clientX;
+                        state.lastTouchY = e.touches[0].clientY;
+                        elements.iframeContainer.classList.add('is-dragging');
+                        e.preventDefault();
+                    } else if (e.touches.length === 2) {
+                        state.touchZoomDistance = getTouchDistance(e.touches[0], e.touches[1]);
+                        e.preventDefault();
+                    }
+                });
+
+                elements.iframeContainer.addEventListener('touchmove', (e) => {
+                    if (!state.panMode) return; // Chỉ cho phép pan/zoom khi ở chế độ pan mode
+
+                    if (state.isTouchDragging && e.touches.length === 1) {
+                        const touch = e.touches[0];
+                        const dx = touch.clientX - state.lastTouchX;
+                        const dy = touch.clientY - state.lastTouchY;
+                        
+                        state.translateX += dx / state.zoom;
+                        state.translateY += dy / state.zoom;
+                        
+                        applyTransform();
+                        
+                        state.lastTouchX = touch.clientX;
+                        state.lastTouchY = touch.clientY;
+                        e.preventDefault();
+                    } else if (e.touches.length === 2 && state.touchZoomDistance > 0) {
+                        const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
+                        const zoomFactor = currentDistance / state.touchZoomDistance;
+                        
+                        applyZoom(state.zoom * zoomFactor);
+                        state.touchZoomDistance = currentDistance;
+                        e.preventDefault();
+                    }
+                }, { passive: false });
+
+                elements.iframeContainer.addEventListener('touchend', () => {
+                    if (state.isTouchDragging) {
+                        state.isTouchDragging = false;
+                        elements.iframeContainer.classList.remove('is-dragging');
+                    }
+                    state.touchZoomDistance = 0;
+                });
+            }
+
+            // Wheel zoom (Ctrl + scroll)
+            if (elements.iframeContainer) {
+                elements.iframeContainer.addEventListener('wheel', (e) => {
+                    if (e.ctrlKey) {
+                        e.preventDefault();
+                        const delta = e.deltaY > 0 ? -CONFIG.ZOOM.STEP : CONFIG.ZOOM.STEP;
+                        applyZoom(state.zoom + delta);
+                    }
+                }, { passive: false });
+            }
+
+            // Panel toggle drag functions
+            function startDraggingPanelToggle(e) {
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                
+                if (!clientX || !clientY) return;
+                
+                state.panelToggleDragging = true;
+                state.panelToggleStartX = clientX - state.panelTogglePosX;
+                state.panelToggleStartY = clientY - state.panelTogglePosY;
+                state.hasDragged = false;
+                
+                if (elements.panelToggle) {
+                    elements.panelToggle.classList.add('dragging');
+                }
+                
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            function dragPanelToggle(e) {
+                if (!state.panelToggleDragging) return;
+                
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                
+                if (!clientX || !clientY) return;
+                
+                const deltaX = Math.abs(clientX - (state.panelToggleStartX + state.panelTogglePosX));
+                const deltaY = Math.abs(clientY - (state.panelToggleStartY + state.panelTogglePosY));
+                
+                if (deltaX > state.dragThreshold || deltaY > state.dragThreshold) {
+                    state.hasDragged = true;
+                }
+                
+                if (state.hasDragged) {
+                    const newX = clientX - state.panelToggleStartX;
+                    const newY = clientY - state.panelToggleStartY;
+                    
+                    const maxX = window.innerWidth - (elements.panelToggle?.offsetWidth || 52);
+                    const maxY = window.innerHeight - (elements.panelToggle?.offsetHeight || 52);
+                    
+                    state.panelTogglePosX = Math.max(0, Math.min(newX, maxX));
+                    state.panelTogglePosY = Math.max(0, Math.min(newY, maxY));
+                    
+                    updatePanelTogglePosition();
+                }
+                
+                e.preventDefault();
+            }
+
+            function stopDraggingPanelToggle(e) {
+                if (state.panelToggleDragging) {
+                    state.panelToggleDragging = false;
+                    
+                    if (elements.panelToggle) {
+                        elements.panelToggle.classList.remove('dragging');
+                    }
+                    
+                    if (state.hasDragged) {
+                        localStorage.setItem('panelTogglePosX', state.panelTogglePosX);
+                        localStorage.setItem('panelTogglePosY', state.panelTogglePosY);
+                    } else {
+                        // Click event (không kéo)
+                        togglePanel();
+                    }
+                }
+            }
+
+            document.addEventListener('mousemove', dragPanelToggle);
+            document.addEventListener('touchmove', dragPanelToggle);
+            document.addEventListener('mouseup', stopDraggingPanelToggle);
+            document.addEventListener('touchend', stopDraggingPanelToggle);
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey || e.metaKey) {
+                    switch(e.key) {
+                        case '=':
+                        case '+':
+                            e.preventDefault();
+                            zoomIn();
+                            break;
+                        case '-':
+                            e.preventDefault();
+                            zoomOut();
+                            break;
+                        case '0':
+                            e.preventDefault();
+                            resetZoom();
+                            break;
+                        case 'p':
+                        case 'P':
+                            e.preventDefault();
+                            togglePanMode();
+                            break;
+                        case 'h':
+                        case 'H':
+                            e.preventDefault();
+                            togglePanel();
+                            break;
+                        case 'r':
+                        case 'R':
+                            e.preventDefault();
+                            reloadPage();
+                            break;
+                        case 'u':
+                        case 'U':
+                            e.preventDefault();
+                            openUrlModal();
+                            break;
+                    }
+                }
+                
+                if (e.key === 'Escape') {
+                    closeUrlModal();
+                }
+            });
+
+            // Window resize
+            window.addEventListener('resize', () => {
+                applyTransform();
+                
+                const maxX = window.innerWidth - (elements.panelToggle?.offsetWidth || 52);
+                const maxY = window.innerHeight - (elements.panelToggle?.offsetHeight || 52);
+                state.panelTogglePosX = Math.max(0, Math.min(state.panelTogglePosX, maxX));
+                state.panelTogglePosY = Math.max(0, Math.min(state.panelTogglePosY, maxY));
+                updatePanelTogglePosition();
+            });
+
+            // Close modal when clicking outside
+            if (elements.urlModal) {
+                elements.urlModal.addEventListener('click', (e) => {
+                    if (e.target === elements.urlModal) {
+                        closeUrlModal();
+                    }
+                });
+            }
+
+        }
+
+        // =========================================================================
+        // === INITIALIZATION ===
+        // =========================================================================
+        function init() {
+            
+            // Initialize DOM elements
+            Object.assign(elements, initializeElements());
+            
+            // Initialize iframe state
+            if (elements.hiddenFrame) {
+                elements.hiddenFrame.classList.add('active');
+            }
+            
+            // Load saved URL
+            const savedUrl = localStorage.getItem('customIframeUrl');
+            if (savedUrl && elements.hiddenFrame && elements.newUrlInput) {
+                elements.hiddenFrame.src = savedUrl;
+                state.currentUrl = savedUrl;
+                elements.newUrlInput.value = savedUrl; // Đặt giá trị mặc định cho input
+            } else if (elements.newUrlInput) {
+                elements.newUrlInput.value = CONFIG.URLS.DEFAULT;
+            }
+            
+            // Load panel toggle position
+            const savedX = localStorage.getItem('panelTogglePosX');
+            const savedY = localStorage.getItem('panelTogglePosY');
+            if (savedX !== null && savedY !== null) {
+                state.panelTogglePosX = parseInt(savedX);
+                state.panelTogglePosY = parseInt(savedY);
+            }
+            
+            // Apply initial transforms and positions
+            updatePanelTogglePosition();
+            applyTransform();
+            
+            // Initialize event listeners
+            initializeEventListeners();
+            
+            // Show welcome message
+            setTimeout(() => {
+                showToast('🚀 Hoi Cloud loaded successfully!', 'info');
+            }, 500);
+        }
+
+        // Start the application
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>
